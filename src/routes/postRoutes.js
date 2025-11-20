@@ -12,16 +12,24 @@ const {
 } = require('../controllers/postController');
 const { protect } = require('../middleware/authMiddleware');
 const { uploadMultiple, handleMulterError } = require('../middleware/uploadMiddleware');
+const { createPostValidation } = require('../validators/postValidator');
 
 const router = express.Router();
 
-// Public routes
+// Public
 router.get('/', getPosts);
 router.get('/:id', getPost);
 router.get('/user/:userId', getUserPosts);
 
-// Protected routes
-router.post('/', protect, uploadMultiple, handleMulterError, createPost);
+// Protected
+router.post(
+  '/',
+  protect,
+  uploadMultiple,
+  handleMulterError,
+  createPostValidation,
+  createPost
+);
 router.put('/:id', protect, updatePost);
 router.delete('/:id', protect, deletePost);
 router.post('/:id/like', protect, likePost);

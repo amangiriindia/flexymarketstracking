@@ -9,17 +9,21 @@ const {
   likeComment
 } = require('../controllers/commentController');
 const { protect } = require('../middleware/authMiddleware');
+const {
+  createCommentValidation,
+  commentIdParam
+} = require('../validators/commentValidator');
 
 const router = express.Router();
 
-// Public routes
+// Public
 router.get('/post/:postId', getPostComments);
 router.get('/:commentId/replies', getCommentReplies);
 
-// Protected routes
-router.post('/', protect, createComment);
-router.put('/:id', protect, updateComment);
-router.delete('/:id', protect, deleteComment);
-router.post('/:id/like', protect, likeComment);
+// Protected
+router.post('/', protect, createCommentValidation, createComment);
+router.put('/:id', protect, commentIdParam, updateComment);
+router.delete('/:id', protect, commentIdParam, deleteComment);
+router.post('/:id/like', protect, commentIdParam, likeComment);
 
 module.exports = router;
