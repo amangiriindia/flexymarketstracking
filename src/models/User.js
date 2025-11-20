@@ -82,4 +82,34 @@ userSchema.pre('save', async function(next) {
   next();
 });
 
+userSchema.virtual('followersCount', {
+  ref: 'Follow',
+  localField: '_id',
+  foreignField: 'following',
+  count: true
+});
+
+userSchema.virtual('followingCount', {
+  ref: 'Follow',
+  localField: '_id',
+  foreignField: 'follower',
+  count: true
+});
+
+userSchema.virtual('followers', {
+  ref: 'Follow',
+  localField: '_id',
+  foreignField: 'following'
+});
+
+userSchema.virtual('following', {
+  ref: 'Follow',
+  localField: '_id',
+  foreignField: 'follower'
+});
+
+// Ensure virtuals are serialized
+userSchema.set('toJSON', { virtuals: true });
+userSchema.set('toObject', { virtuals: true });
+
 module.exports = mongoose.model('User', userSchema);

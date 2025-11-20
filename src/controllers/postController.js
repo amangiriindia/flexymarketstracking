@@ -1,6 +1,8 @@
 // src/controllers/postController.js
 const Post = require('../models/Post');
+const Follow = require('../models/Follow');
 const { uploadMedia, deleteMedia } = require('../services/cloudinaryService');
+
 
 // @desc    Create new post (text, poll, image/video/mixed)
 // @route   POST /api/v1/posts
@@ -81,34 +83,134 @@ exports.createPost = async (req, res, next) => {
   }
 };
 
-// @desc    Get public feed
-// @route   GET /api/v1/posts
-// @access  Public
+
+
+/**
+ * @desc    Get personalized infinite feed (Following + Trending + Never-ending)
+ * @route   GET /api/v1/posts
+ * @access  Public (but personalized if logged in)
+ */
 exports.getPosts = async (req, res, next) => {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(50, parseInt(req.query.limit) || 10);
+    const limit = Math.min(30, Math.max(10, parseInt(req.query.limit) || 15));
     const skip = (page - 1) * limit;
+    const userId = req.user?._id;
 
-    const [posts, total] = await Promise.all([
-      Post.find({ visibility: 'public', isActive: true })
+    let posts = [];
+    let followingIds = [];
+
+    // Step 1: Get who the user follows (only if authenticated)
+    if (userId) {
+      const follows = await Follow.find({ follower: userId })
+        .select('following')
+        .lean();
+
+      followingIds = follows.map(f => f.following);
+    }
+
+    // Step 2: Priority 1 → Posts from people I follow (chronological)
+    if (followingIds.length > 0) {
+      const followedPosts = await Post.find({
+        user: { $in: followingIds },
+        isActive: true
+      })
         .populate('user', 'name avatar email')
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(limit)
-        .lean(),
+        .limit(limit * 2)
+        .lean();
 
-      Post.countDocuments({ visibility: 'public', isActive: true })
-    ]);
+      posts.push(...followedPosts);
+    }
+
+    // Step 3: If less than needed → Fill with trending public posts
+    if (posts.length < limit) {
+      const needed = limit - posts.length + 10; // Extra buffer
+
+      const trendingPosts = await Post.find({
+        visibility: 'public',
+        isActive: true,
+        user: { 
+          $nin: [...followingIds, userId].filter(Boolean) // Exclude self & following
+        }
+      })
+        .populate('user', 'name avatar email')
+        .sort({ 
+          likesCount: -1,    // Most liked first
+          commentsCount: -1,
+          createdAt: -1 
+        })
+        .limit(needed)
+        .lean();
+
+      posts.push(...trendingPosts);
+    }
+
+    // Step 4: Deduplicate by _id
+    const seen = new Set();
+    posts = posts.filter(post => {
+      const id = post._id.toString();
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+
+    // Step 5: Smart shuffle (80% chronological/trending, 20% variety)
+    const shuffled = posts
+      .sort((a, b) => {
+        // Keep recent followed posts on top
+        const aFollowed = followingIds.includes(a.user._id.toString());
+        const bFollowed = followingIds.includes(b.user._id.toString());
+        if (aFollowed && !bFollowed) return -1;
+        if (!aFollowed && bFollowed) return 1;
+        return 0;
+      })
+      .map((post, i) => ({ post, sort: Math.random() + (i * 0.001) }))
+      .sort((a, b) => a.sort - b.sort)
+      .map(item => item.post);
+
+    // Final slice
+    posts = shuffled.slice(0, limit);
+
+    // Step 6: Never-ending feed → If still short, loop top posts
+    if (posts.length < limit && page > 5) { // After page 5, start recycling
+      const evergreen = await Post.find({
+        visibility: 'public',
+        isActive: true,
+        likesCount: { $gte: 5 }
+      })
+        .select('_id user content media postType visibility likesCount createdAt')
+        .populate('user', 'name avatar')
+        .sort({ likesCount: -1, createdAt: -1 })
+        .limit(100)
+        .lean();
+
+      const filler = evergreen
+        .filter(p => !seen.has(p._id.toString()))
+        .sort(() => Math.random() - 0.5)
+        .slice(0, limit - posts.length);
+
+      posts.push(...filler);
+    }
+
+    // Always return full page for infinite scroll
+    const finalPosts = posts.slice(0, limit);
 
     res.status(200).json({
       status: 'success',
       data: {
-        posts,
-        pagination: { page, limit, total, pages: Math.ceil(total / limit) }
+        posts: finalPosts,
+        pagination: {
+          page,
+          limit,
+          hasMore: true, // Infinite scroll = always true
+          total: null // Unknown total → true infinite feel
+        }
       }
     });
   } catch (error) {
+    console.error('Feed Error:', error);
     next(error);
   }
 };

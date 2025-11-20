@@ -11,7 +11,7 @@ const authRoutes = require('./routes/authRoutes');
 const postRoutes = require('./routes/postRoutes');
 const commentRoutes = require('./routes/commentRoutes');
 const voiceCallRoutes = require('./routes/voiceCallRoutes');
-
+const followRoutes =  require('./routes/followRoutes');
 const app = express();
 
 // Middleware
@@ -65,6 +65,7 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/posts', postRoutes);
 app.use('/api/v1/comments', commentRoutes);
 app.use('/api/v1/voice-calls', voiceCallRoutes);
+app.use('/api/v1/follow',followRoutes);
 
 // ──────────────────────────────
 // 404 Handler (FIXED & FUTURE-PROOF)
