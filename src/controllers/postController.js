@@ -1,8 +1,8 @@
 // src/controllers/postController.js
 const Post = require('../models/Post');
-const cloudinary = require('../config/cloudinary');
+const { uploadMedia, deleteMedia } = require('../services/cloudinaryService');
 
-// @desc    Create new post (text, poll, image/video)
+// @desc    Create new post (text, poll, image/video/mixed)
 // @route   POST /api/v1/posts
 // @access  Private
 exports.createPost = async (req, res, next) => {
@@ -16,33 +16,55 @@ exports.createPost = async (req, res, next) => {
       content: text ? { text: text.trim() } : undefined
     };
 
-    // Handle poll
-    if (postType === 'poll' && poll) {
+    // Handle poll data (supports both JSON string and object)
+    if (postType === 'poll') {
+      let pollObj = poll;
+      if (typeof poll === 'string') {
+        try {
+          pollObj = JSON.parse(poll);
+        } catch (e) {
+          return res.status(400).json({
+            status: 'error',
+            message: 'Invalid poll JSON format'
+          });
+        }
+      }
+
+      if (!pollObj?.question || !Array.isArray(pollObj?.options) || pollObj.options.length < 2) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Poll must have a question and at least 2 options'
+        });
+      }
+
       postData.poll = {
-        question: poll.question.trim(),
-        options: poll.options.map(opt => ({ text: opt.trim(), votes: [] })),
-        endsAt: poll.endsAt ? new Date(poll.endsAt) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-        allowMultipleVotes: !!poll.allowMultipleVotes
+        question: pollObj.question.trim(),
+        options: pollObj.options.slice(0, 10).map(opt => ({ text: opt.trim(), votes: [] })),
+        endsAt: pollObj.endsAt ? new Date(pollObj.endsAt) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        allowMultipleVotes: !!pollObj.allowMultipleVotes
       };
     }
 
-    // Handle file uploads
-    if (req.files?.length > 0) {
-      const uploadPromises = req.files.map(file =>
-        cloudinary.uploader.upload(file.path, {
-          folder: 'posts',
-          resource_type: 'auto'
-        })
-      );
+    // Handle media uploads from memory → Cloudinary
+    if (req.files && req.files.length > 0) {
+      try {
+        postData.media = await uploadMedia(req.files);
 
-      const results = await Promise.all(uploadPromises);
+        // Auto-detect postType based on uploaded media
+        const hasImage = postData.media.some(m => m.type === 'image');
+        const hasVideo = postData.media.some(m => m.type === 'video');
 
-      postData.media = results.map(result => ({
-        type: result.resource_type === 'image' ? 'image' : 'video',
-        url: result.secure_url,
-        publicId: result.public_id,
-        thumbnail: result.thumbnail_url || result.secure_url
-      }));
+        if (hasImage && hasVideo) postData.postType = 'mixed';
+        else if (hasVideo) postData.postType = 'video';
+        else if (hasImage) postData.postType = 'image';
+        else if (text && postData.media.length > 0) postData.postType = 'mixed';
+      } catch (uploadError) {
+        console.error('Cloudinary upload failed:', uploadError);
+        return res.status(500).json({
+          status: 'error',
+          message: 'Failed to upload media. Please try again.'
+        });
+      }
     }
 
     const post = await Post.create(postData);
@@ -54,6 +76,7 @@ exports.createPost = async (req, res, next) => {
       data: { post }
     });
   } catch (error) {
+    console.error('Create Post Error:', error);
     next(error);
   }
 };
@@ -90,7 +113,7 @@ exports.getPosts = async (req, res, next) => {
   }
 };
 
-// @desc    Get single post by ID
+// @desc    Get single post
 // @route   GET /api/v1/posts/:id
 // @access  Public
 exports.getPost = async (req, res, next) => {
@@ -100,22 +123,16 @@ exports.getPost = async (req, res, next) => {
       .populate('likes.user', 'name avatar');
 
     if (!post || !post.isActive) {
-      return res.status(404).json({
-        status: 'error',
-        message: 'Post not found'
-      });
+      return res.status(404).json({ status: 'error', message: 'Post not found' });
     }
 
-    res.status(200).json({
-      status: 'success',
-      data: { post }
-    });
+    res.status(200).json({ status: 'success', data: { post } });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc    Update post text or visibility
+// @desc    Update post (text or visibility only)
 // @route   PUT /api/v1/posts/:id
 // @access  Private
 exports.updatePost = async (req, res, next) => {
@@ -138,7 +155,7 @@ exports.updatePost = async (req, res, next) => {
 
     res.status(200).json({
       status: 'success',
-      message: 'Post updated',
+      message: 'Post updated successfully',
       data: { post }
     });
   } catch (error) {
@@ -146,7 +163,7 @@ exports.updatePost = async (req, res, next) => {
   }
 };
 
-// @desc    Delete post + media cleanup
+// @desc    Delete post + clean up Cloudinary media
 // @route   DELETE /api/v1/posts/:id
 // @access  Private
 exports.deletePost = async (req, res, next) => {
@@ -160,17 +177,17 @@ exports.deletePost = async (req, res, next) => {
       return res.status(403).json({ status: 'error', message: 'Not authorized' });
     }
 
-    // Delete from Cloudinary
-    if (post.media?.length > 0) {
-      const deletePromises = post.media.map(m => cloudinary.uploader.destroy(m.publicId));
-      await Promise.all(deletePromises);
+    // Delete all associated media from Cloudinary
+    if (post.media && post.media.length > 0) {
+      const publicIds = post.media.map(m => m.publicId);
+      await deleteMedia(publicIds); // Uses bulk delete via service
     }
 
     await Post.findByIdAndDelete(req.params.id);
 
     res.status(200).json({
       status: 'success',
-      message: 'Post deleted permanently'
+      message: 'Post and media deleted successfully'
     });
   } catch (error) {
     next(error);
@@ -219,14 +236,21 @@ exports.likePost = async (req, res, next) => {
 exports.voteOnPoll = async (req, res, next) => {
   try {
     const { optionIndex } = req.body;
-    const post = await Post.findById(req.params.id);
+    if (optionIndex === undefined || optionIndex < 0) {
+      return res.status(400).json({ status: 'error', message: 'Valid optionIndex is required' });
+    }
 
+    const post = await Post.findById(req.params.id);
     if (!post || post.postType !== 'poll' || !post.isActive) {
       return res.status(404).json({ status: 'error', message: 'Poll not found' });
     }
 
     if (new Date() > new Date(post.poll.endsAt)) {
-      return res.status(400).json({ status: 'error', message: 'Poll has ended' });
+      return res.status(400).json({ status: 'error', message: 'This poll has ended' });
+    }
+
+    if (optionIndex >= post.poll.options.length) {
+      return res.status(400).json({ status: 'error', message: 'Invalid option selected' });
     }
 
     const userIdStr = req.user.id.toString();
@@ -235,7 +259,7 @@ exports.voteOnPoll = async (req, res, next) => {
     );
 
     if (alreadyVoted && !post.poll.allowMultipleVotes) {
-      return res.status(400).json({ status: 'error', message: 'Already voted' });
+      return res.status(400).json({ status: 'error', message: 'You have already voted' });
     }
 
     post.poll.options[optionIndex].votes.push({ user: req.user.id });
@@ -243,7 +267,7 @@ exports.voteOnPoll = async (req, res, next) => {
 
     res.status(200).json({
       status: 'success',
-      message: 'Vote recorded',
+      message: 'Vote recorded successfully',
       data: { poll: post.poll }
     });
   } catch (error) {
@@ -252,7 +276,7 @@ exports.voteOnPoll = async (req, res, next) => {
 };
 
 // @desc    Get posts by user
-// @route   GET /api/v1/posts/user/:userId
+// @route   GET /api/v1 Routes: /api/v1/posts/user/:userId
 // @access  Public
 exports.getUserPosts = async (req, res, next) => {
   try {
