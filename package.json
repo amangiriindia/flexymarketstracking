@@ -15,6 +15,7 @@
   "dependencies": {
     "agora-access-token": "^2.0.4",
     "agora-rtc-sdk-ng": "^4.24.0",
+    "axios": "^1.13.2",
     "bcryptjs": "^3.0.3",
     "cloudinary": "^2.8.0",
     "compression": "^1.8.1",
@@ -29,6 +30,7 @@
     "morgan": "^1.10.1",
     "multer": "^2.0.2",
     "streamifier": "^0.1.1",
+    "ua-parser-js": "^2.0.6",
     "uuid": "^13.0.0"
   },
   "devDependencies": {

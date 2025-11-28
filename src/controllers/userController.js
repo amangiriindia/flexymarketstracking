@@ -6,8 +6,10 @@ const Comment = require('../models/Comment');
 const mongoose = require('mongoose');
 const { formatLoginInfo } = require('../services/ipAuthService');
 const { uploadMedia } = require('../services/cloudinaryService');
+const LoginHistory = require('../models/LoginHistory');
 
 /**
+ * 
  * @desc    Get logged-in user's full private profile
  */
 exports.getMyProfile = async (req, res) => {
@@ -350,6 +352,64 @@ exports.getFollowStatus = async (req, res) => {
     });
   } catch (error) {
     console.error('Follow Status Error:', error);
+    res.status(500).json({ status: 'error', message: 'Server error' });
+  }
+};
+
+/**
+ * @desc    Get complete login + registration history of the user
+ * @route   GET /api/v1/users/login-history
+ * @access  Private (only own history)
+ */
+exports.getLoginHistory = async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(10, parseInt(req.query.limit) || 20));
+    const skip = (page - 1) * limit;
+
+    const [history, total] = await Promise.all([
+      LoginHistory.find({ user: req.user.id })
+        .sort({ loginAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+
+      LoginHistory.countDocuments({ user: req.user.id })
+    ]);
+
+    const formattedHistory = history.map(entry => ({
+      id: entry._id,
+      ip: entry.ip,
+      device: entry.device,
+      userAgent: entry.userAgent,
+      loginAt: entry.loginAt,
+      location: entry.location ? {
+        country: entry.location.country || 'Unknown',
+        state: entry.location.state || 'Unknown',
+        city: entry.location.city || 'Unknown',
+        pincode: entry.location.pincode || 'Unknown',
+        formattedAddress: entry.location.formattedAddress || 'Unknown',
+        lat: entry.location.lat || null,
+        lng: entry.location.lng || null
+      } : null
+    }));
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Login history fetched',
+      data: {
+        history: formattedHistory,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit),
+          hasMore: skip + history.length < total
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Get Login History Error:', error);
     res.status(500).json({ status: 'error', message: 'Server error' });
   }
 };

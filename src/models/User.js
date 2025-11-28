@@ -49,26 +49,34 @@ const userSchema = new mongoose.Schema({
   },
 
   // ──────────────────────────────
-  // IP & Device Tracking (Added Here)
+  // IP & Device Tracking
   // ──────────────────────────────
-  registeredIp: {
-    type: String,
-    trim: true
+  registeredIp: { type: String, trim: true },
+  registeredDevice: { type: String, trim: true },
+  lastIp: { type: String, trim: true },
+  lastDevice: { type: String, trim: true },
+  lastLoginAt: { type: Date },
+
+  // ──────────────────────────────
+  // Full Location Tracking (Google Maps)
+  // ──────────────────────────────
+  location: {
+    country: String,
+    state: String,
+    city: String,
+    pincode: String,
+    formattedAddress: String,
+    lat: Number,
+    lng: Number
   },
-  registeredDevice: {
-    type: String,
-    trim: true
-  },
-  lastIp: {
-    type: String,
-    trim: true
-  },
-  lastDevice: {
-    type: String,
-    trim: true
-  },
-  lastLoginAt: {
-    type: Date
+  lastLocation: {
+    country: String,
+    state: String,
+    city: String,
+    pincode: String,
+    formattedAddress: String,
+    lat: Number,
+    lng: Number
   }
 }, {
   timestamps: true
@@ -109,7 +117,7 @@ userSchema.pre('save', async function(next) {
 });
 
 // ──────────────────────────────
-// Virtuals: Follow System
+// Virtuals: Follow System (Works with .lean() too if needed)
 // ──────────────────────────────
 userSchema.virtual('followersCount', {
   ref: 'Follow',
@@ -125,20 +133,8 @@ userSchema.virtual('followingCount', {
   count: true
 });
 
-userSchema.virtual('followers', {
-  ref: 'Follow',
-  localField: '_id',
-  foreignField: 'following'
-});
-
-userSchema.virtual('following', {
-  ref: 'Follow',
-  localField: '_id',
-  foreignField: 'follower'
-});
-
 // ──────────────────────────────
-// JSON Settings
+// JSON Output
 // ──────────────────────────────
 userSchema.set('toJSON', { virtuals: true });
 userSchema.set('toObject', { virtuals: true });

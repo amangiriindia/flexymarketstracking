@@ -1,13 +1,19 @@
 // src/controllers/authController.js
 const User = require('../models/User');
+const LoginHistory = require('../models/LoginHistory');
 const { validationResult } = require('express-validator');
-const {
-  getClientIp,
-  getDeviceInfo,
-  formatLoginInfo
-} = require('../services/ipAuthService');
+const { getClientIp } = require('../services/ipAuthService');
+const { getDeviceInfo } = require('../services/deviceService');
+const { getLocationFromIp } = require('../services/locationService');
 
-// Register new user + track IP & device
+// Helper: Format login info for response
+const formatLoginInfo = (ip, device) => `${ip} · ${device.substring(0, 50)}${device.length > 50 ? '...' : ''}`;
+
+/**
+ * @desc    Register new user + track IP, Device & Location
+ * @route   POST /api/v1/auth/register
+ * @access  Public
+ */
 exports.register = async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -17,6 +23,7 @@ exports.register = async (req, res, next) => {
   try {
     const { name, email, phone, password } = req.body;
 
+    // Check if user already exists
     const existingUser = await User.findOne({ $or: [{ email }, { phone }] });
     if (existingUser) {
       return res.status(400).json({
@@ -25,16 +32,49 @@ exports.register = async (req, res, next) => {
       });
     }
 
+    // Capture client data
     const ip = getClientIp(req);
-    const device = getDeviceInfo(req);
+    const userAgent = req.headers['user-agent'] || 'Unknown';
+    const device = getDeviceInfo(userAgent);
+    const location = await getLocationFromIp(ip);
 
+    // Create user with tracking
     const user = await User.create({
       name,
       email,
       phone,
       password,
       registeredIp: ip,
-      registeredDevice: device
+      registeredDevice: device,
+      ...(location && {
+        location: {
+          country: location.country || null,
+          state: location.state || null,
+          city: location.city || null,
+          pincode: location.pincode || null,
+          formattedAddress: location.formattedAddress || null,
+          lat: location.lat || null,
+          lng: location.lng || null
+        }
+      })
+    });
+
+    // Save registration as first login
+    await LoginHistory.create({
+      user: user._id,
+      ip,
+      device,
+      userAgent,
+      location: location ? {
+        country: location.country,
+        state: location.state,
+        city: location.city,
+        pincode: location.pincode,
+        formattedAddress: location.formattedAddress,
+        lat: location.lat,
+        lng: location.lng
+      } : null,
+      loginAt: new Date()
     });
 
     const token = user.generateAuthToken();
@@ -56,14 +96,21 @@ exports.register = async (req, res, next) => {
       }
     });
   } catch (error) {
+    console.error('Register Error:', error);
     next(error);
   }
 };
 
-// Login user + update last login
+/**
+ * @desc    Login user + update last login + save full history
+ * @route   POST /api/v1/auth/login
+ * @access  Public
+ */
 exports.login = async (req, res, next) => {
   const errors = validationResult(req);
-  if (!errors.isEmpty()) return res.status(400).json({ status: 'error', errors: errors.array() });
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ status: 'error', errors: errors.array() });
+  }
 
   try {
     const { email, password } = req.body;
@@ -76,14 +123,45 @@ exports.login = async (req, res, next) => {
       });
     }
 
+    // Capture login data
     const ip = getClientIp(req);
-    const device = getDeviceInfo(req);
+    const userAgent = req.headers['user-agent'] || 'Unknown';
+    const device = getDeviceInfo(userAgent);
+    const location = await getLocationFromIp(ip);
 
-    // Update login tracking
+    // Update user's last login
     user.lastIp = ip;
     user.lastDevice = device;
     user.lastLoginAt = new Date();
+    if (location) {
+      user.lastLocation = {
+        country: location.country || null,
+        state: location.state || null,
+        city: location.city || null,
+        pincode: location.pincode || null,
+        formattedAddress: location.formattedAddress || null,
+        lat: location.lat || null,
+        lng: location.lng || null
+      };
+    }
     await user.save({ validateBeforeSave: false });
+
+    // Save full login history
+    await LoginHistory.create({
+      user: user._id,
+      ip,
+      device,
+      userAgent,
+      location: location ? {
+        country: location.country,
+        state: location.state,
+        city: location.city,
+        pincode: location.pincode,
+        formattedAddress: location.formattedAddress,
+        lat: location.lat,
+        lng: location.lng
+      } : null
+    });
 
     const token = user.generateAuthToken();
 
@@ -105,17 +183,23 @@ exports.login = async (req, res, next) => {
       }
     });
   } catch (error) {
+    console.error('Login Error:', error);
     next(error);
   }
 };
 
-// Get logged-in user profile
+/**
+ * @desc    Get current user profile with tracking info
+ * @route   GET /api/v1/auth/me
+ * @access  Private
+ */
 exports.getMe = async (req, res, next) => {
   try {
     const user = await User.findById(req.user.id);
 
     res.status(200).json({
       status: 'success',
+      message: 'Profile fetched',
       data: {
         user: {
           id: user._id,
@@ -124,21 +208,29 @@ exports.getMe = async (req, res, next) => {
           phone: user.phone,
           avatar: user.avatar,
           role: user.role,
+          isActive: user.isActive,
+          createdAt: user.createdAt,
           registeredIp: user.registeredIp || 'Unknown',
           registeredDevice: user.registeredDevice || 'Unknown',
           lastLoginAt: user.lastLoginAt || null,
-          lastLoginFrom: user.lastIp 
-            ? formatLoginInfo(user.lastIp, user.lastDevice || 'Unknown Device')
-            : 'Never logged in'
+          lastLoginFrom: user.lastIp
+            ? formatLoginInfo(user.lastIp, user.lastDevice || 'Unknown')
+            : 'Never logged in',
+          lastLocation: user.lastLocation || null
         }
       }
     });
   } catch (error) {
+    console.error('Get Me Error:', error);
     next(error);
   }
 };
 
-// Update profile
+/**
+ * @desc    Update profile
+ * @route   PUT /api/v1/auth/update-profile
+ * @access  Private
+ */
 exports.updateProfile = async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ status: 'error', errors: errors.array() });
@@ -162,20 +254,41 @@ exports.updateProfile = async (req, res, next) => {
   }
 };
 
-// src/controllers/authController.js → Add
-exports.registerAdmin = async (req, res) => {
-  // Only allow from trusted source or secret key
-  const { secret } = req.body;
-  if (secret !== process.env.ADMIN_SECRET) {
-    return res.status(403).json({ status: 'error', message: 'Invalid admin secret' });
+/**
+ * @desc    Register Admin (protected by secret)
+ * @route   POST /api/v1/auth/register-admin
+ * @access  Public (with secret)
+ */
+exports.registerAdmin = async (req, res, next) => {
+  try {
+    const { name, email, phone, password, secret } = req.body;
+
+    if (secret !== process.env.ADMIN_SECRET) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Invalid admin secret key'
+      });
+    }
+
+    const existing = await User.findOne({ $or: [{ email }, { phone }] });
+    if (existing) {
+      return res.status(400).json({ status: 'error', message: 'Admin already exists' });
+    }
+
+    const admin = await User.create({
+      name, email, phone, password, role: 'admin',
+      registeredIp: getClientIp(req),
+      registeredDevice: getDeviceInfo(req.headers['user-agent'] || '')
+    });
+
+    const token = admin.generateAuthToken();
+
+    res.status(201).json({
+      status: 'success',
+      message: 'Admin created successfully',
+      data: { admin: { id: admin._id, name: admin.name, role: 'admin' }, token }
+    });
+  } catch (error) {
+    next(error);
   }
-
-  const user = await User.create({ ...req.body, role: 'admin' });
-  const token = user.generateAuthToken();
-
-  res.status(201).json({
-    status: 'success',
-    message: 'Admin created',
-    data: { user: { id: user._id, name: user.name, role: 'admin' }, token }
-  });
 };

@@ -11,7 +11,8 @@ const {
   getUserPublicProfile,
   getUserFollowers,
   getUserFollowing,
-  getFollowStatus
+  getFollowStatus,
+  getLoginHistory
 } = require('../controllers/userController');
 
 const {
@@ -49,5 +50,6 @@ router.get('/followers/:userId', userIdParam, getUserFollowers);
 router.get('/following', getUserFollowing);
 router.get('/following/:userId', userIdParam, getUserFollowing);
 router.get('/follow-status/:userId', userIdParam, getFollowStatus);
+router.get('/login-history', getLoginHistory);
 
 module.exports = router;
