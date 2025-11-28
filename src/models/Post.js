@@ -5,7 +5,8 @@ const postSchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: true,
+    index: true
   },
   content: {
     text: {
@@ -22,24 +23,46 @@ const postSchema = new mongoose.Schema({
   media: [{
     type: {
       type: String,
-      enum: ['image', 'video']
+      enum: ['image', 'video'],
+      required: true
     },
-    url: String,
-    publicId: String,
-    thumbnail: String
+    url: {
+      type: String,
+      required: true
+    },
+    publicId: {
+      type: String,
+      required: true
+    },
+    thumbnail: {
+      type: String
+    }
   }],
   poll: {
-    question: String,
+    question: {
+      type: String,
+      trim: true
+    },
     options: [{
-      text: String,
+      text: {
+        type: String,
+        required: true,
+        trim: true
+      },
       votes: [{
         user: {
           type: mongoose.Schema.Types.ObjectId,
           ref: 'User'
+        },
+        votedAt: {
+          type: Date,
+          default: Date.now
         }
       }]
     }],
-    endsAt: Date,
+    endsAt: {
+      type: Date
+    },
     allowMultipleVotes: {
       type: Boolean,
       default: false
@@ -48,45 +71,85 @@ const postSchema = new mongoose.Schema({
   likes: [{
     user: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
+      ref: 'User',
+      required: true
     },
     createdAt: {
       type: Date,
       default: Date.now
     }
   }],
-  commentsCount: {
-    type: Number,
-    default: 0
-  },
   sharesCount: {
     type: Number,
-    default: 0
+    default: 0,
+    min: 0
+  },
+  commentsCount: {
+    type: Number,
+    default: 0,
+    min: 0
   },
   visibility: {
     type: String,
     enum: ['public', 'private', 'followers'],
     default: 'public'
   },
+  status: {
+    type: String,
+    enum: ['inReview', 'live', 'rejected'],
+    default: 'inReview',  // All new posts go to admin review
+    required: true
+  },
   isActive: {
     type: Boolean,
     default: true
+  },
+  reviewedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  reviewedAt: {
+    type: Date
   }
 }, {
   timestamps: true
 });
 
-// Indexes for better query performance
+// ──────────────────────────────
+// Indexes for Performance
+// ──────────────────────────────
 postSchema.index({ user: 1, createdAt: -1 });
 postSchema.index({ createdAt: -1 });
+postSchema.index({ status: 1, createdAt: -1 });        // For admin dashboard
+postSchema.index({ status: 1, visibility: 1 });       // For feed queries
 postSchema.index({ 'likes.user': 1 });
+postSchema.index({ 'poll.options.votes.user': 1 });
 
-// Virtual for likes count
-postSchema.virtual('likesCount').get(function() {
+// ──────────────────────────────
+// Virtuals
+// ──────────────────────────────
+postSchema.virtual('likesCount').get(function () {
   return this.likes.length;
 });
 
-// Ensure virtuals are included when converting to JSON
+postSchema.virtual('totalVotes').get(function () {
+  if (!this.poll) return 0;
+  return this.poll.options.reduce((total, opt) => total + opt.votes.length, 0);
+});
+
+// ──────────────────────────────
+// Pre-save hook: Auto-set reviewedAt when status changes to live/rejected
+// ──────────────────────────────
+postSchema.pre('save', function (next) {
+  if (this.isModified('status') && (this.status === 'live' || this.status === 'rejected')) {
+    this.reviewedAt = new Date();
+  }
+  next();
+});
+
+// ──────────────────────────────
+// JSON Output Settings
+// ──────────────────────────────
 postSchema.set('toJSON', { virtuals: true });
 postSchema.set('toObject', { virtuals: true });
 

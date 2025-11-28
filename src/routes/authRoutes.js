@@ -4,7 +4,8 @@ const {
   register,
   login,
   getMe,
-  updateProfile
+  updateProfile,
+registerAdmin
 } = require('../controllers/authController');
 const { protect } = require('../middleware/authMiddleware');
 const {
@@ -18,6 +19,7 @@ const router = express.Router();
 // Public Routes
 router.post('/register', registerValidation, register);
 router.post('/login', loginValidation, login);
+router.post('/register-admin', registerAdmin);
 
 // Protected Routes
 router.get('/me', protect, getMe);

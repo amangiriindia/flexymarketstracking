@@ -46,12 +46,37 @@ const userSchema = new mongoose.Schema({
     type: Number,
     unique: true,
     sparse: true
+  },
+
+  // ──────────────────────────────
+  // IP & Device Tracking (Added Here)
+  // ──────────────────────────────
+  registeredIp: {
+    type: String,
+    trim: true
+  },
+  registeredDevice: {
+    type: String,
+    trim: true
+  },
+  lastIp: {
+    type: String,
+    trim: true
+  },
+  lastDevice: {
+    type: String,
+    trim: true
+  },
+  lastLoginAt: {
+    type: Date
   }
 }, {
   timestamps: true
 });
 
-// Hash password before saving
+// ──────────────────────────────
+// Password Hashing
+// ──────────────────────────────
 userSchema.pre('save', async function(next) {
   if (!this.isModified('password')) return next();
   
@@ -60,17 +85,18 @@ userSchema.pre('save', async function(next) {
   next();
 });
 
-// Compare password
+// ──────────────────────────────
+// Instance Methods
+// ──────────────────────────────
 userSchema.methods.comparePassword = async function(candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
-// Generate JWT token
 userSchema.methods.generateAuthToken = function() {
   return jwt.sign(
     { id: this._id, role: this.role },
     process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRE }
+    { expiresIn: process.env.JWT_EXPIRE || '7d' }
   );
 };
 
@@ -82,6 +108,9 @@ userSchema.pre('save', async function(next) {
   next();
 });
 
+// ──────────────────────────────
+// Virtuals: Follow System
+// ──────────────────────────────
 userSchema.virtual('followersCount', {
   ref: 'Follow',
   localField: '_id',
@@ -108,7 +137,9 @@ userSchema.virtual('following', {
   foreignField: 'follower'
 });
 
-// Ensure virtuals are serialized
+// ──────────────────────────────
+// JSON Settings
+// ──────────────────────────────
 userSchema.set('toJSON', { virtuals: true });
 userSchema.set('toObject', { virtuals: true });
 
