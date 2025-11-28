@@ -33,15 +33,19 @@ const upload = multer({
   fileFilter
 });
 
-// Export configurations
-exports.uploadMultiple = upload.array('files', 10);     // For creating posts
-exports.uploadSingle   = upload.single('file');         // For avatar, etc.
+// ──────────────────────────────
+// EXPORT UPLOAD MIDDLEWARES
+// ──────────────────────────────
+exports.uploadMultiple = upload.array('files', 10);     
+exports.uploadSingle   = upload.single('avatar');     
 exports.uploadFields   = upload.fields([
   { name: 'images', maxCount: 10 },
   { name: 'videos', maxCount: 3 }
 ]);
 
-// Multer error handler
+// ──────────────────────────────
+// Multer Error Handler
+// ──────────────────────────────
 exports.handleMulterError = (error, req, res, next) => {
   if (error instanceof multer.MulterError) {
     if (error.code === 'LIMIT_FILE_SIZE') {
@@ -59,7 +63,7 @@ exports.handleMulterError = (error, req, res, next) => {
     if (error.code === 'LIMIT_UNEXPECTED_FILE') {
       return res.status(400).json({
         status: 'error',
-        message: 'Unexpected field name. Use "files" for multiple uploads.'
+        message: 'Unexpected field name. Use "avatar" for profile picture.'
       });
     }
   }
