@@ -13,10 +13,9 @@ const formatLoginInfo = (ip, device) => `${ip} · ${device.substring(0, 50)}${de
 
 
 /**
- * @desc    Flexible Registration (with optional role parameter)
+ * @desc    Flexible Registration with Username (name optional)
  * @route   POST /api/v1/auth/register-with-role
- * @access  Public (but role assignment should be protected in production)
- * @note    In production, add authorization check for role assignment
+ * @access  Public
  */
 exports.registerWithRole = async (req, res, next) => {
   const errors = validationResult(req);
@@ -25,24 +24,26 @@ exports.registerWithRole = async (req, res, next) => {
   }
 
   try {
-    const { name, email, phone, password, role } = req.body;
+    const { userName, name, email, phone, password, role } = req.body;
 
-    // Validate role (optional, defaults to 'user')
-    const allowedRoles = ['user', 'admin'];
-    const userRole = role && allowedRoles.includes(role) ? role : 'user';
-
-    // SECURITY WARNING: In production, you should verify authorization 
-    // before allowing 'admin' role assignment. Example:
-    // if (userRole === 'admin' && req.body.adminSecret !== process.env.ADMIN_SECRET) {
-    //   return res.status(403).json({ status: 'error', message: 'Unauthorized admin creation' });
-    // }
+    // Validate role (optional, defaults to 'USER')
+    const allowedRoles = ['USER', 'ADMIN'];
+    const userRole = role && allowedRoles.includes(role.toUpperCase()) ? role.toUpperCase() : 'USER';
 
     // Check if user already exists
-    const existingUser = await User.findOne({ $or: [{ email }, { phone }] });
+    const existingUser = await User.findOne({ 
+      $or: [{ email }, { phone }, { userName: userName.toLowerCase() }] 
+    });
+    
     if (existingUser) {
+      let field = 'email or phone';
+      if (existingUser.userName === userName.toLowerCase()) field = 'username';
+      else if (existingUser.email === email) field = 'email';
+      else if (existingUser.phone === phone) field = 'phone';
+      
       return res.status(400).json({
         status: 'error',
-        message: 'User already exists with this email or phone'
+        message: `User already exists with this ${field}`
       });
     }
 
@@ -54,7 +55,8 @@ exports.registerWithRole = async (req, res, next) => {
 
     // Create user with specified role
     const user = await User.create({
-      name,
+      userName: userName.toLowerCase(),
+      name: name || userName, // Use username as name if name not provided
       email,
       phone,
       password,
@@ -96,10 +98,11 @@ exports.registerWithRole = async (req, res, next) => {
 
     res.status(201).json({
       status: 'success',
-      message: `${userRole === 'admin' ? 'Admin' : 'User'} account created successfully!`,
+      message: `${userRole === 'ADMIN' ? 'Admin' : 'User'} account created successfully!`,
       data: {
         user: {
           id: user._id,
+          userName: user.userName,
           name: user.name,
           email: user.email,
           phone: user.phone,

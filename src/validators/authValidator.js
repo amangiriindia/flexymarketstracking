@@ -4,11 +4,19 @@ const { body } = require('express-validator');
 
 
 
+
 exports.registerWithRoleValidation = [
-  body('name')
+  body('userName')
     .trim()
-    .notEmpty().withMessage('Name is required')
-    .isLength({ min: 2, max: 50 }).withMessage('Name must be between 2-50 characters'),
+    .notEmpty().withMessage('Username is required')
+    .isLength({ min: 3, max: 30 }).withMessage('Username must be between 3-30 characters')
+    .matches(/^[a-zA-Z0-9_]+$/).withMessage('Username can only contain letters, numbers and underscores'),
+  
+  
+  body('name')
+    .optional()
+    .trim()
+    .isLength({ max: 50 }).withMessage('Name cannot be more than 50 characters'),
   
   body('email')
     .trim()
@@ -17,9 +25,11 @@ exports.registerWithRoleValidation = [
     .normalizeEmail(),
   
   body('phone')
+    .optional({ checkFalsy: true })
     .trim()
-    .notEmpty().withMessage('Phone number is required')
-    .matches(/^[0-9]{10,15}$/).withMessage('Please provide a valid phone number (10-15 digits)'),
+    .matches(/^[0-9]{10,15}$/)
+    .withMessage('Please provide a valid phone number (10-15 digits)'),
+
   
   body('password')
     .notEmpty().withMessage('Password is required')
@@ -27,8 +37,10 @@ exports.registerWithRoleValidation = [
   
   body('role')
     .optional()
-    .isIn(['user', 'admin']).withMessage('Role must be either "user" or "admin"')
+    .customSanitizer(value => value ? value.toUpperCase() : 'USER')
+    .isIn(['USER', 'ADMIN']).withMessage('Role must be either "USER" or "ADMIN"')
 ];
+
 
 
 exports.registerValidation = [

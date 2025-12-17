@@ -1,12 +1,17 @@
-// src/models/User.js
+
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
 const userSchema = new mongoose.Schema({
+  userName: {
+    type: String,
+    required: [true, 'Please provide a username'],
+
+  },
   name: {
     type: String,
-    required: [true, 'Please provide a name'],
+    required: false, 
     trim: true,
     maxlength: [50, 'Name cannot be more than 50 characters']
   },
@@ -19,14 +24,12 @@ const userSchema = new mongoose.Schema({
   },
   phone: {
     type: String,
-    required: [true, 'Please provide a phone number'],
-    unique: true,
+    required: false, 
     match: [/^[0-9]{10,15}$/, 'Please provide a valid phone number']
   },
   password: {
     type: String,
     required: [true, 'Please provide a password'],
-    minlength: [6, 'Password must be at least 6 characters'],
     select: false
   },
   avatar: {
@@ -35,8 +38,8 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['user', 'admin'],
-    default: 'user'
+    enum: ['USER', 'ADMIN', 'user', 'admin'],
+    default: 'USER'
   },
   isActive: {
     type: Boolean,
@@ -47,19 +50,11 @@ const userSchema = new mongoose.Schema({
     unique: true,
     sparse: true
   },
-
-  // ──────────────────────────────
-  // IP & Device Tracking
-  // ──────────────────────────────
   registeredIp: { type: String, trim: true },
   registeredDevice: { type: String, trim: true },
   lastIp: { type: String, trim: true },
   lastDevice: { type: String, trim: true },
   lastLoginAt: { type: Date },
-
-  // ──────────────────────────────
-  // Full Location Tracking (Google Maps)
-  // ──────────────────────────────
   location: {
     country: String,
     state: String,
@@ -82,20 +77,15 @@ const userSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// ──────────────────────────────
 // Password Hashing
-// ──────────────────────────────
 userSchema.pre('save', async function(next) {
   if (!this.isModified('password')) return next();
-  
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
   next();
 });
 
-// ──────────────────────────────
 // Instance Methods
-// ──────────────────────────────
 userSchema.methods.comparePassword = async function(candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
@@ -116,9 +106,6 @@ userSchema.pre('save', async function(next) {
   next();
 });
 
-// ──────────────────────────────
-// Virtuals: Follow System (Works with .lean() too if needed)
-// ──────────────────────────────
 userSchema.virtual('followersCount', {
   ref: 'Follow',
   localField: '_id',
@@ -133,9 +120,6 @@ userSchema.virtual('followingCount', {
   count: true
 });
 
-// ──────────────────────────────
-// JSON Output
-// ──────────────────────────────
 userSchema.set('toJSON', { virtuals: true });
 userSchema.set('toObject', { virtuals: true });
 
