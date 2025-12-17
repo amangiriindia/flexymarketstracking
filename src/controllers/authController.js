@@ -32,14 +32,14 @@ exports.registerWithRole = async (req, res, next) => {
 
     // Check if user already exists
     const existingUser = await User.findOne({ 
-      $or: [{ email }, { phone }, { userName: userName.toLowerCase() }] 
+      $or: [{ email }, { userName: userName}] 
     });
     
     if (existingUser) {
       let field = 'email or phone';
-      if (existingUser.userName === userName.toLowerCase()) field = 'username';
+      if (existingUser.userName === userName) field = 'username';
       else if (existingUser.email === email) field = 'email';
-      else if (existingUser.phone === phone) field = 'phone';
+     
       
       return res.status(400).json({
         status: 'error',
@@ -55,8 +55,8 @@ exports.registerWithRole = async (req, res, next) => {
 
     // Create user with specified role
     const user = await User.create({
-      userName: userName.toLowerCase(),
-      name: name || userName, // Use username as name if name not provided
+      userName: userName,
+      name: name,
       email,
       phone,
       password,
