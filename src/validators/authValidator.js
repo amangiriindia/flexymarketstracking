@@ -50,12 +50,49 @@ exports.registerValidation = [
 
 exports.loginValidation = [
   body('email')
-    .isEmail()
-    .normalizeEmail()
-    .withMessage('Please provide a valid email'),
+    .trim()
+    .notEmpty().withMessage('Email is required')
+    .isEmail().withMessage('Please provide a valid email'),
+  
   body('password')
-    .notEmpty()
-    .withMessage('Password is required')
+    .notEmpty().withMessage('Password is required'),
+  
+  body('deviceInfo')
+    .optional()
+    .isString().withMessage('Device info must be a string')
+    .trim(),
+  
+  body('locationInfo')
+    .optional()
+    .isObject().withMessage('Location info must be an object'),
+  
+  body('locationInfo.country')
+    .optional()
+    .isString().withMessage('Country must be a string'),
+  
+  body('locationInfo.state')
+    .optional()
+    .isString().withMessage('State must be a string'),
+  
+  body('locationInfo.city')
+    .optional()
+    .isString().withMessage('City must be a string'),
+  
+  body('locationInfo.pincode')
+    .optional()
+    .isString().withMessage('Pincode must be a string'),
+  
+  body('locationInfo.formattedAddress')
+    .optional()
+    .isString().withMessage('Formatted address must be a string'),
+  
+  body('locationInfo.lat')
+    .optional()
+    .isFloat({ min: -90, max: 90 }).withMessage('Latitude must be between -90 and 90'),
+  
+  body('locationInfo.lng')
+    .optional()
+    .isFloat({ min: -180, max: 180 }).withMessage('Longitude must be between -180 and 180')
 ];
 
 exports.updateProfileValidation = [

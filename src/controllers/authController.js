@@ -210,8 +210,9 @@ exports.register = async (req, res, next) => {
   }
 };
 
+
 /**
- * @desc    Login user + update last login + save full history
+ * @desc    Login user with manual device & location info
  * @route   POST /api/v1/auth/login
  * @access  Public
  */
@@ -222,7 +223,7 @@ exports.login = async (req, res, next) => {
   }
 
   try {
-    const { email, password } = req.body;
+    const { email, password, deviceInfo, locationInfo } = req.body;
 
     const user = await User.findOne({ email }).select('+password');
     if (!user || !(await user.comparePassword(password)) || !user.isActive) {
@@ -232,11 +233,35 @@ exports.login = async (req, res, next) => {
       });
     }
 
-    // Capture login data
+    // Use manual device info if provided, otherwise detect automatically
     const ip = getClientIp(req);
     const userAgent = req.headers['user-agent'] || 'Unknown';
-    const device = getDeviceInfo(userAgent);
-    const location = await getLocationFromIp(ip);
+    let device, location;
+
+    // MANUAL DEVICE INFO (from user)
+    if (deviceInfo && typeof deviceInfo === 'string' && deviceInfo.trim()) {
+      device = deviceInfo.trim();
+    } else {
+      // Fallback to automatic detection
+      device = getDeviceInfo(userAgent);
+    }
+
+    // MANUAL LOCATION INFO (from user)
+    if (locationInfo && typeof locationInfo === 'object') {
+      location = {
+        country: locationInfo.country || null,
+        state: locationInfo.state || null,
+        city: locationInfo.city || null,
+        pincode: locationInfo.pincode || null,
+        formattedAddress: locationInfo.formattedAddress || 
+          `${locationInfo.city || ''}, ${locationInfo.state || ''}, ${locationInfo.country || ''}`.replace(/^,\s*|,\s*$/g, '').trim() || null,
+        lat: locationInfo.lat || null,
+        lng: locationInfo.lng || null
+      };
+    } else {
+      // Fallback to automatic IP-based location
+      location = await getLocationFromIp(ip);
+    }
 
     // Update user's last login
     user.lastIp = ip;
