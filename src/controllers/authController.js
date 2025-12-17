@@ -9,6 +9,115 @@ const { getLocationFromIp } = require('../services/locationService');
 // Helper: Format login info for response
 const formatLoginInfo = (ip, device) => `${ip} · ${device.substring(0, 50)}${device.length > 50 ? '...' : ''}`;
 
+
+
+
+/**
+ * @desc    Flexible Registration (with optional role parameter)
+ * @route   POST /api/v1/auth/register-with-role
+ * @access  Public (but role assignment should be protected in production)
+ * @note    In production, add authorization check for role assignment
+ */
+exports.registerWithRole = async (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ status: 'error', errors: errors.array() });
+  }
+
+  try {
+    const { name, email, phone, password, role } = req.body;
+
+    // Validate role (optional, defaults to 'user')
+    const allowedRoles = ['user', 'admin'];
+    const userRole = role && allowedRoles.includes(role) ? role : 'user';
+
+    // SECURITY WARNING: In production, you should verify authorization 
+    // before allowing 'admin' role assignment. Example:
+    // if (userRole === 'admin' && req.body.adminSecret !== process.env.ADMIN_SECRET) {
+    //   return res.status(403).json({ status: 'error', message: 'Unauthorized admin creation' });
+    // }
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ $or: [{ email }, { phone }] });
+    if (existingUser) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'User already exists with this email or phone'
+      });
+    }
+
+    // Capture client data for tracking
+    const ip = getClientIp(req);
+    const userAgent = req.headers['user-agent'] || 'Unknown';
+    const device = getDeviceInfo(userAgent);
+    const location = await getLocationFromIp(ip);
+
+    // Create user with specified role
+    const user = await User.create({
+      name,
+      email,
+      phone,
+      password,
+      role: userRole,
+      registeredIp: ip,
+      registeredDevice: device,
+      ...(location && {
+        location: {
+          country: location.country || null,
+          state: location.state || null,
+          city: location.city || null,
+          pincode: location.pincode || null,
+          formattedAddress: location.formattedAddress || null,
+          lat: location.lat || null,
+          lng: location.lng || null
+        }
+      })
+    });
+
+    // Save registration as first login history
+    await LoginHistory.create({
+      user: user._id,
+      ip,
+      device,
+      userAgent,
+      location: location ? {
+        country: location.country,
+        state: location.state,
+        city: location.city,
+        pincode: location.pincode,
+        formattedAddress: location.formattedAddress,
+        lat: location.lat,
+        lng: location.lng
+      } : null,
+      loginAt: new Date()
+    });
+
+    const token = user.generateAuthToken();
+
+    res.status(201).json({
+      status: 'success',
+      message: `${userRole === 'admin' ? 'Admin' : 'User'} account created successfully!`,
+      data: {
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          avatar: user.avatar,
+          role: user.role,
+          registeredFrom: formatLoginInfo(ip, device)
+        },
+        token
+      }
+    });
+  } catch (error) {
+    console.error('Register With Role Error:', error);
+    next(error);
+  }
+};
+
+
+
 /**
  * @desc    Register new user + track IP, Device & Location
  * @route   POST /api/v1/auth/register
