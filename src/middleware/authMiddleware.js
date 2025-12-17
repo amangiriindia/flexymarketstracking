@@ -22,10 +22,11 @@ exports.protect = async (req, res, next) => {
     try {
       // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
+     console.log(decoded.userData.email);
+     
       // Get user from token
-      req.user = await User.findById(decoded.id).select('-password');
-
+      req.user = await User.findOne({email:decoded.userData.email});
+  
       if (!req.user) {
         return res.status(401).json({
           status: 'error',
