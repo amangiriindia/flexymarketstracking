@@ -14,6 +14,8 @@ const voiceCallRoutes = require('./routes/voiceCallRoutes');
 const followRoutes =  require('./routes/followRoutes');
 const adminRoutes =  require('./routes/adminRoutes');
 const userRoutes =  require('./routes/userRoutes');
+const trackingRoutes = require('./routes/trackingRoutes');
+const adminTrackingRoutes = require('./routes/adminTrackingRoutes');
 const app = express();
 
 // Middleware
@@ -70,6 +72,8 @@ app.use('/api/v1/voice-calls', voiceCallRoutes);
 app.use('/api/v1/follow',followRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/users', userRoutes);
+app.use('/api/v1/tracking', trackingRoutes);
+app.use('/api/v1/admin/tracking', adminTrackingRoutes);
 
 // ──────────────────────────────
 // 404 Handler (FIXED & FUTURE-PROOF)
