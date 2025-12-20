@@ -15,42 +15,15 @@ const screenActivitySchema = new mongoose.Schema({
     index: true
   },
   
-  // Screen Information
+
   screenName: {
-    type: String,
-    required: true,
-    index: true,
-    enum: [
-      'login',
-      'home',
-      'profile',
-      'settings',
-      'trading',
-      'wallet',
-      'metalist',
-      'notifications',
-      'search',
-      'post_detail',
-      'post_create',
-      'post_edit',
-      'user_profile',
-      'followers',
-      'following',
-      'chat',
-      'video_call',
-      'live_stream',
-      'explore',
-      'bookmarks',
-      'analytics',
-      'help',
-      'about',
-      'terms',
-      'privacy',
-      'logout'
-    ]
-  },
+  type: String,
+  required: true,
+  index: true,
+  trim: true
+},
   
-  screenRoute: String, // '/home', '/trading/btc', '/profile/123'
+  screenRoute: String, 
   screenTitle: String,
   
   // Navigation Flow
@@ -58,8 +31,6 @@ const screenActivitySchema = new mongoose.Schema({
   nextScreen: String,
   navigationMethod: {
     type: String,
-    enum: ['tap', 'swipe', 'back_button', 'deep_link', 'notification', 'auto'],
-    default: 'tap'
   },
   
   // Timing
@@ -78,7 +49,7 @@ const screenActivitySchema = new mongoose.Schema({
   actions: [{
     actionType: {
       type: String,
-      enum: ['click', 'scroll', 'swipe', 'type', 'submit', 'share', 'like', 'comment', 'view']
+      
     },
     actionTarget: String, // button_name, element_id
     timestamp: {

@@ -139,65 +139,104 @@ exports.sharePost = async (req, res, next) => {
 };
 
 /**
- * @desc    Personalized infinite feed (only LIVE posts)
+ * @desc    Personalized infinite feed (only LIVE posts) - FIXED VERSION
  * @route   GET /api/v1/posts
  * @access  Public
  */
 exports.getPosts = async (req, res, next) => {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(30, Math.max(10, parseInt(req.query.limit) || 15));
+    const limit = Math.min(30, Math.max(10, parseInt(req.query.limit) || 10));
+    const skip = (page - 1) * limit;
     const userId = req.user?._id;
-    let posts = [], followingIds = [];
 
+    let followingIds = [];
+
+    // Get user's following list if authenticated
     if (userId) {
       const follows = await Follow.find({ follower: userId }).select('following').lean();
-      followingIds = follows.map(f => f.following);
+      followingIds = follows.map(f => f.following.toString());
     }
 
-    if (followingIds.length > 0) {
-      const followed = await Post.find({
-        user: { $in: followingIds },
-        status: 'live',
-        isActive: true
+    // Build query for posts from following + public posts
+    const query = {
+      status: 'live',
+      isActive: true,
+      user: { $exists: true, $ne: null } // Ensure user field exists and is not null
+    };
+
+    // First, let's debug what's in the database
+    const allPosts = await Post.find({ status: 'live', isActive: true })
+      .select('_id user')
+      .lean();
+    
+    console.log('=== POST DEBUG ===');
+    console.log('Total live posts:', allPosts.length);
+    console.log('Posts with null users:', allPosts.filter(p => !p.user).length);
+    console.log('Posts with valid users:', allPosts.filter(p => p.user).length);
+    console.log('==================');
+
+    // Fetch posts with proper pagination
+    const posts = await Post.find(query)
+      .populate({
+        path: 'user',
+        select: 'name avatar email userName',
+        match: { isActive: true } // Only populate active users
       })
-        .populate('user', 'name avatar email')
-        .sort({ createdAt: -1 })
-        .limit(limit * 2)
-        .lean();
-      posts.push(...followed);
-    }
-
-    if (posts.length < limit) {
-      const trending = await Post.find({
-        status: 'live',
-        visibility: 'public',
-        isActive: true,
-        user: { $nin: [...followingIds, userId].filter(Boolean) }
+      .sort({ 
+        createdAt: -1 // Most recent first
       })
-        .populate('user', 'name avatar email')
-        .sort({ likesCount: -1, sharesCount: -1, createdAt: -1 })
-        .limit(limit * 3)
-        .lean();
-      posts.push(...trending);
-    }
+      .skip(skip)
+      .limit(limit + 1) // Fetch one extra to check if there are more
+      .lean();
 
-    const seen = new Set();
-    posts = posts.filter(p => !seen.has(p._id.toString()) && seen.add(p._id.toString()));
-    const shuffled = posts
-      .map(p => ({ post: p, boost: followingIds.includes(p.user._id.toString()) ? 100 : 0 }))
-      .sort((a, b) => b.boost + Math.random() - (a.boost + Math.random()))
-      .map(i => i.post)
-      .slice(0, limit);
+    console.log('Posts fetched after populate:', posts.length);
+    console.log('Posts with populated user:', posts.filter(p => p.user).length);
+
+    // Check if there are more posts
+    const hasMore = posts.length > limit;
+    
+    // Remove the extra post if exists
+    const finalPosts = hasMore ? posts.slice(0, limit) : posts;
+
+    // Filter out any posts where user is still null (extra safety)
+    const validPosts = finalPosts.filter(p => p.user && p.user._id);
+
+    console.log('Valid posts after filtering:', validPosts.length);
+
+    // Prioritize posts from following users
+    const sortedPosts = validPosts.sort((a, b) => {
+      const aIsFollowing = followingIds.includes(a.user._id.toString());
+      const bIsFollowing = followingIds.includes(b.user._id.toString());
+      
+      // Posts from following users come first
+      if (aIsFollowing && !bIsFollowing) return -1;
+      if (!aIsFollowing && bIsFollowing) return 1;
+      
+      // Otherwise maintain chronological order
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    });
+
+    // Get total count for pagination info (only posts with valid users)
+    const totalCount = await Post.countDocuments(query);
 
     res.json({
       status: 'success',
       data: {
-        posts: shuffled,
-        pagination: { page, limit, hasMore: true, total: null }
+        posts: sortedPosts,
+        pagination: {
+          page,
+          limit,
+          total: totalCount,
+          hasMore: sortedPosts.length >= limit,
+          nextPage: sortedPosts.length >= limit ? page + 1 : null
+        }
       }
     });
-  } catch (error) { next(error); }
+  } catch (error) {
+    console.error('Get Posts Error:', error);
+    next(error);
+  }
 };
 
 /**
@@ -229,7 +268,7 @@ exports.updatePost = async (req, res, next) => {
     const post = await Post.findById(req.params.id);
     if (!post || !post.isActive) return res.status(404).json({ status: 'error', message: 'Post not found' });
 
-    if (post.user.toString() !== req.user.id && req.user.role !== 'admin') {
+    if (post.user.toString() !== req.user.id && req.user.role !== 'ADMIN') {
       return res.status(403).json({ status: 'error', message: 'Not authorized' });
     }
 
@@ -254,7 +293,7 @@ exports.deletePost = async (req, res, next) => {
     const post = await Post.findById(req.params.id);
     if (!post) return res.status(404).json({ status: 'error', message: 'Post not found' });
 
-    if (post.user.toString() !== req.user.id && req.user.role !== 'admin') {
+    if (post.user.toString() !== req.user.id && req.user.role !== 'ADMIN') {
       return res.status(403).json({ status: 'error', message: 'Not authorized' });
     }
 
@@ -355,5 +394,3 @@ exports.getUserPosts = async (req, res, next) => {
     });
   } catch (error) { next(error); }
 };
-
-

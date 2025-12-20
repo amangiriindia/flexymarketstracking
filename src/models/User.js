@@ -35,7 +35,7 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['USER', 'ADMIN', 'user', 'admin'],
+    enum: ['USER', 'ADMIN'],
     default: 'USER'
   },
   isActive: {
@@ -89,7 +89,15 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
 
 userSchema.methods.generateAuthToken = function() {
   return jwt.sign(
-    { id: this._id, role: this.role },
+    { 
+      id: this._id, 
+      role: this.role,
+      userData: {
+        email: this.email,
+        name: this.name,
+        phone: this.phone
+      }
+    },
     process.env.JWT_SECRET,
     { expiresIn: process.env.JWT_EXPIRE || '7d' }
   );

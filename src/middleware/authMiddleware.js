@@ -22,10 +22,10 @@ exports.protect = async (req, res, next) => {
     try {
       // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-     console.log(decoded.userData.email);
+      console.log('Decoded Token:', decoded); // Debug
      
       // Get user from token
-      req.user = await User.findOne({email:decoded.userData.email});
+      req.user = await User.findOne({email: decoded.userData.email});
   
       if (!req.user) {
         return res.status(401).json({
@@ -41,8 +41,16 @@ exports.protect = async (req, res, next) => {
         });
       }
 
+      console.log('User found:', {
+        id: req.user._id,
+        email: req.user.email,
+        role: req.user.role,
+        roleType: typeof req.user.role
+      }); // Debug
+
       next();
     } catch (error) {
+      console.error('Token verification error:', error);
       return res.status(401).json({
         status: 'error',
         message: 'Token is invalid or expired'
@@ -56,7 +64,11 @@ exports.protect = async (req, res, next) => {
 // Grant access to specific roles
 exports.authorize = (...roles) => {
   return (req, res, next) => {
-    if (!roles.includes(req.user.role)) {
+    // Normalize to uppercase for comparison
+    const normalizedRoles = roles.map(role => role.toUpperCase());
+    const userRole = req.user.role.toUpperCase();
+    
+    if (!normalizedRoles.includes(userRole)) {
       return res.status(403).json({
         status: 'error',
         message: `User role '${req.user.role}' is not authorized to access this route`

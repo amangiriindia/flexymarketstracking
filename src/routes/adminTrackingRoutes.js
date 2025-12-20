@@ -21,7 +21,7 @@ const router = express.Router();
 
 // All routes require admin authentication
 router.use(protect);
-router.use(authorize('ADMIN', 'admin'));
+router.use(authorize('ADMIN')); // ← Change 'admin' to 'ADMIN' (uppercase)
 
 /**
  * SESSION MONITORING
