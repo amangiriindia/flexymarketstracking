@@ -16,6 +16,8 @@ const adminRoutes =  require('./routes/adminRoutes');
 const userRoutes =  require('./routes/userRoutes');
 const trackingRoutes = require('./routes/trackingRoutes');
 const adminTrackingRoutes = require('./routes/adminTrackingRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
+const adminNotificationRoutes = require('./routes/adminNotificationRoutes');
 const app = express();
 
 // Middleware
@@ -74,11 +76,12 @@ app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/tracking', trackingRoutes);
 app.use('/api/v1/admin/tracking', adminTrackingRoutes);
+app.use('/api/v1/notifications', notificationRoutes);
+app.use('/api/v1/admin/notifications', adminNotificationRoutes);
 
 // ──────────────────────────────
-// 404 Handler (FIXED & FUTURE-PROOF)
+// 404 Handler
 // ──────────────────────────────
-// This replaces the broken app.all('*', ...) that crashes with path-to-regexp v7+
 app.use((req, res, next) => {
   res.status(404).json({
     status: 'error',

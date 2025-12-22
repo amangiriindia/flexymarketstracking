@@ -1,5 +1,5 @@
 // src/server.js
-require('dotenv').config(); // ← Must be FIRST
+require('dotenv').config(); 
 
 const app = require('./app');
 const connectDB = require('./config/database');
@@ -7,13 +7,23 @@ const connectDB = require('./config/database');
 // ──────────────────────────────
 // Critical: Initialize Cloudinary Config Early
 // ──────────────────────────────
-require('./config/cloudinary'); // This loads and configures Cloudinary with env vars
+require('./config/cloudinary');
+
+// ──────────────────────────────
+// NEW: Initialize Notification Scheduler
+// ──────────────────────────────
+const NotificationScheduler = require('./jobs/notificationScheduler');
 
 const PORT = process.env.PORT || 5001;
 
 // Connect to MongoDB
 connectDB().then(() => {
   console.log('MongoDB Connected Successfully');
+  
+  // ──────────────────────────────
+  // Initialize Cron Jobs after DB connection
+  // ──────────────────────────────
+  NotificationScheduler.init();
 });
 
 // Start Server
