@@ -80,8 +80,9 @@ app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/admin/notifications', adminNotificationRoutes);
 
 // ──────────────────────────────
-// 404 Handler
+// 404 Handler (FIXED & FUTURE-PROOF)
 // ──────────────────────────────
+// This replaces the broken app.all('*', ...) that crashes with path-to-regexp v7+
 app.use((req, res, next) => {
   res.status(404).json({
     status: 'error',

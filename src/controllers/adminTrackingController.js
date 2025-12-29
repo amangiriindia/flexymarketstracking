@@ -646,3 +646,410 @@ exports.getScreenSpecificAnalytics = async (req, res) => {
     });
   }
 };
+
+
+/**
+ * @desc    Get comprehensive admin dashboard statistics
+ * @route   GET /api/v1/admin/tracking/stats/dashboard
+ * @access  Private/Admin
+ */
+exports.getAdminDashboardStats = async (req, res) => {
+  try {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const thisWeekStart = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+    const [
+      // USER STATISTICS
+      totalUsers,
+      activeUsersNow,
+      newUsersToday,
+      newUsersThisWeek,
+      newUsersThisMonth,
+      
+      // SESSION STATISTICS
+      totalSessions,
+      activeSessionsNow,
+      sessionsToday,
+      sessionsThisWeek,
+      sessionsThisMonth,
+      avgSessionDuration,
+      
+      // SCREEN STATISTICS
+      totalScreenViews,
+      screenViewsToday,
+      uniqueScreens,
+      mostViewedScreens,
+      
+      // DEVICE STATISTICS
+      deviceDistribution,
+      
+      // LOCATION STATISTICS
+      topCountries,
+      topCities,
+      
+      // ENGAGEMENT METRICS
+      engagementMetrics,
+      
+      // REAL-TIME STATS
+      liveUserDetails
+    ] = await Promise.all([
+      // Total registered users
+      User.countDocuments(),
+      
+      // Currently active users
+      UserSession.countDocuments({ status: 'active' }),
+      
+      // New users registered today
+      User.countDocuments({ createdAt: { $gte: today } }),
+      
+      // New users this week
+      User.countDocuments({ createdAt: { $gte: thisWeekStart } }),
+      
+      // New users this month
+      User.countDocuments({ createdAt: { $gte: thisMonthStart } }),
+      
+      // Total sessions ever
+      UserSession.countDocuments(),
+      
+      // Active sessions right now
+      UserSession.countDocuments({ status: 'active' }),
+      
+      // Sessions today
+      UserSession.countDocuments({ startTime: { $gte: today } }),
+      
+      // Sessions this week
+      UserSession.countDocuments({ startTime: { $gte: thisWeekStart } }),
+      
+      // Sessions this month
+      UserSession.countDocuments({ startTime: { $gte: thisMonthStart } }),
+      
+      // Average session duration (last 30 days)
+      UserSession.aggregate([
+        {
+          $match: {
+            startTime: { $gte: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000) },
+            totalDuration: { $exists: true, $ne: null }
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            avgDuration: { $avg: '$totalDuration' }
+          }
+        }
+      ]),
+      
+      // Total screen views
+      ScreenActivity.countDocuments(),
+      
+      // Screen views today
+      ScreenActivity.countDocuments({ enteredAt: { $gte: today } }),
+      
+      // Unique screens visited
+      ScreenActivity.distinct('screenName'),
+      
+      // Most viewed screens (last 7 days)
+      ScreenActivity.aggregate([
+        {
+          $match: {
+            enteredAt: { $gte: thisWeekStart }
+          }
+        },
+        {
+          $group: {
+            _id: '$screenName',
+            views: { $sum: 1 },
+            uniqueUsers: { $addToSet: '$user' }
+          }
+        },
+        {
+          $project: {
+            screenName: '$_id',
+            views: 1,
+            uniqueUsers: { $size: '$uniqueUsers' }
+          }
+        },
+        {
+          $sort: { views: -1 }
+        },
+        {
+          $limit: 10
+        }
+      ]),
+      
+      // Device type distribution (last 30 days)
+      UserSession.aggregate([
+        {
+          $match: {
+            startTime: { $gte: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000) }
+          }
+        },
+        {
+          $group: {
+            _id: '$device.type',
+            count: { $sum: 1 },
+            percentage: { $sum: 1 }
+          }
+        },
+        {
+          $sort: { count: -1 }
+        }
+      ]),
+      
+      // Top countries (last 30 days)
+      UserSession.aggregate([
+        {
+          $match: {
+            startTime: { $gte: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000) },
+            'location.country': { $exists: true, $ne: null }
+          }
+        },
+        {
+          $group: {
+            _id: '$location.country',
+            sessions: { $sum: 1 },
+            uniqueUsers: { $addToSet: '$user' }
+          }
+        },
+        {
+          $project: {
+            country: '$_id',
+            sessions: 1,
+            uniqueUsers: { $size: '$uniqueUsers' }
+          }
+        },
+        {
+          $sort: { sessions: -1 }
+        },
+        {
+          $limit: 10
+        }
+      ]),
+      
+      // Top cities (last 30 days)
+      UserSession.aggregate([
+        {
+          $match: {
+            startTime: { $gte: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000) },
+            'location.city': { $exists: true, $ne: null }
+          }
+        },
+        {
+          $group: {
+            _id: {
+              city: '$location.city',
+              country: '$location.country'
+            },
+            sessions: { $sum: 1 },
+            uniqueUsers: { $addToSet: '$user' }
+          }
+        },
+        {
+          $project: {
+            city: '$_id.city',
+            country: '$_id.country',
+            sessions: 1,
+            uniqueUsers: { $size: '$uniqueUsers' }
+          }
+        },
+        {
+          $sort: { sessions: -1 }
+        },
+        {
+          $limit: 10
+        }
+      ]),
+      
+      // Engagement metrics
+      UserSession.aggregate([
+        {
+          $match: {
+            startTime: { $gte: thisWeekStart }
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            totalScreensViewed: { $sum: '$totalScreens' },
+            totalSessions: { $sum: 1 },
+            returningUsers: {
+              $sum: { $cond: [{ $eq: ['$isFirstSession', false] }, 1, 0] }
+            },
+            firstTimeUsers: {
+              $sum: { $cond: [{ $eq: ['$isFirstSession', true] }, 1, 0] }
+            }
+          }
+        },
+        {
+          $project: {
+            avgScreensPerSession: {
+              $round: [{ $divide: ['$totalScreensViewed', '$totalSessions'] }, 2]
+            },
+            returningUsers: 1,
+            firstTimeUsers: 1,
+            returnRate: {
+              $round: [
+                {
+                  $multiply: [
+                    { $divide: ['$returningUsers', '$totalSessions'] },
+                    100
+                  ]
+                },
+                2
+              ]
+            }
+          }
+        }
+      ]),
+      
+      // Live user details (currently active)
+      UserSession.find({ status: 'active' })
+        .populate('user', 'name email avatar')
+        .select('user device location lastActivityTime startTime')
+        .sort({ lastActivityTime: -1 })
+        .limit(20)
+        .lean()
+    ]);
+
+    // Calculate device percentages
+    const totalDeviceSessions = deviceDistribution.reduce((sum, d) => sum + d.count, 0);
+    const devicesWithPercentage = deviceDistribution.map(d => ({
+      type: d._id || 'Unknown',
+      count: d.count,
+      percentage: Math.round((d.count / totalDeviceSessions) * 100 * 100) / 100
+    }));
+
+    // Get current screen for live users
+    const liveUsersWithCurrentScreen = await Promise.all(
+      liveUserDetails.map(async (session) => {
+        const currentScreen = await ScreenActivity.findOne({
+          session: session._id,
+          exitedAt: null
+        }).sort({ enteredAt: -1 }).select('screenName enteredAt').lean();
+
+        return {
+          user: session.user,
+          device: session.device?.type,
+          location: {
+            city: session.location?.city,
+            country: session.location?.country
+          },
+          currentScreen: currentScreen?.screenName || 'Unknown',
+          timeOnScreen: currentScreen 
+            ? Math.floor((now - currentScreen.enteredAt) / 1000) 
+            : 0,
+          sessionDuration: Math.floor((now - session.startTime) / 1000),
+          lastActivity: session.lastActivityTime
+        };
+      })
+    );
+
+    // Calculate growth rates
+    const userGrowthRate = newUsersThisWeek > 0 && totalUsers > 0
+      ? Math.round((newUsersThisWeek / Math.max(totalUsers - newUsersThisWeek, 1)) * 100 * 100) / 100
+      : 0;
+
+    const sessionGrowthRate = sessionsThisWeek > 0 && totalSessions > 0
+      ? Math.round((sessionsThisWeek / Math.max(totalSessions - sessionsThisWeek, 1)) * 100 * 100) / 100
+      : 0;
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        // OVERVIEW STATS
+        overview: {
+          totalUsers,
+          activeUsersNow,
+          totalSessions,
+          activeSessionsNow,
+          totalScreenViews,
+          uniqueScreens: uniqueScreens.length,
+          avgSessionDuration: avgSessionDuration[0]?.avgDuration 
+            ? Math.round(avgSessionDuration[0].avgDuration) 
+            : 0
+        },
+
+        // USER METRICS
+        users: {
+          total: totalUsers,
+          active: activeUsersNow,
+          newToday: newUsersToday,
+          newThisWeek: newUsersThisWeek,
+          newThisMonth: newUsersThisMonth,
+          growthRate: `${userGrowthRate}%`
+        },
+
+        // SESSION METRICS
+        sessions: {
+          total: totalSessions,
+          active: activeSessionsNow,
+          today: sessionsToday,
+          thisWeek: sessionsThisWeek,
+          thisMonth: sessionsThisMonth,
+          growthRate: `${sessionGrowthRate}%`,
+          avgDuration: avgSessionDuration[0]?.avgDuration 
+            ? Math.round(avgSessionDuration[0].avgDuration) 
+            : 0
+        },
+
+        // SCREEN METRICS
+        screens: {
+          totalViews: totalScreenViews,
+          viewsToday: screenViewsToday,
+          uniqueScreens: uniqueScreens.length,
+          mostViewed: mostViewedScreens.map(s => ({
+            screenName: s.screenName,
+            views: s.views,
+            uniqueUsers: s.uniqueUsers
+          }))
+        },
+
+        // ENGAGEMENT
+        engagement: engagementMetrics[0] || {
+          avgScreensPerSession: 0,
+          returningUsers: 0,
+          firstTimeUsers: 0,
+          returnRate: 0
+        },
+
+        // DEVICE DISTRIBUTION
+        devices: devicesWithPercentage,
+
+        // LOCATION STATISTICS
+        locations: {
+          topCountries: topCountries.map(l => ({
+            country: l.country,
+            sessions: l.sessions,
+            uniqueUsers: l.uniqueUsers
+          })),
+          topCities: topCities.map(l => ({
+            city: l.city,
+            country: l.country,
+            sessions: l.sessions,
+            uniqueUsers: l.uniqueUsers
+          }))
+        },
+
+        // LIVE USERS (Real-time)
+        liveUsers: {
+          count: activeUsersNow,
+          users: liveUsersWithCurrentScreen
+        },
+
+        // METADATA
+        generatedAt: now,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+      }
+    });
+  } catch (error) {
+    console.error('Get Admin Dashboard Stats Error:', error);
+    res.status(500).json({ 
+      status: 'error', 
+      message: 'Failed to fetch dashboard statistics',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};

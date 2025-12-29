@@ -8,7 +8,8 @@ const {
   getScreenAnalytics,
   getUserBehaviorAnalytics,
   getUserJourney,
-  getScreenSpecificAnalytics
+  getScreenSpecificAnalytics,
+  getAdminDashboardStats  // ← Add this import
 } = require('../controllers/adminTrackingController');
 
 const {
@@ -21,7 +22,12 @@ const router = express.Router();
 
 // All routes require admin authentication
 router.use(protect);
-router.use(authorize('ADMIN')); // ← Change 'admin' to 'ADMIN' (uppercase)
+router.use(authorize('ADMIN'));
+
+/**
+ * DASHBOARD STATS (Add this at the top for easy access)
+ */
+router.get('/stats/dashboard', getAdminDashboardStats);
 
 /**
  * SESSION MONITORING

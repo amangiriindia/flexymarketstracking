@@ -10,7 +10,7 @@ const connectDB = require('./config/database');
 require('./config/cloudinary');
 
 // ──────────────────────────────
-// NEW: Initialize Notification Scheduler
+// Initialize Notification Scheduler
 // ──────────────────────────────
 const NotificationScheduler = require('./jobs/notificationScheduler');
 
@@ -44,7 +44,7 @@ process.on('uncaughtException', (err) => {
   process.exit(1);
 });
 
-// Optional: Graceful shutdown on SIGTERM (for Docker/K8s)
+
 process.on('SIGTERM', () => {
   console.log('SIGTERM received. Shutting down gracefully...');
   server.close(() => {
