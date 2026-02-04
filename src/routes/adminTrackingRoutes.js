@@ -27,6 +27,7 @@ router.use(authorize('ADMIN'));
 /**
  * DASHBOARD STATS (Add this at the top for easy access)
  */
+
 router.get('/stats/dashboard', getAdminDashboardStats);
 
 /**
