@@ -47,7 +47,7 @@ if (process.env.NODE_ENV === 'development') {
 app.get('/', (req, res) => {
   res.status(200).json({
     status: 'success',
-    message: 'Mobile App Service API',
+    message: 'Achiver Fx Mobile App Service API',
     version: '1.0.0',
     endpoints: {
       auth: '/api/v1/auth',
