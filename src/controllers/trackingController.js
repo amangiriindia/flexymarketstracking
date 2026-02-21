@@ -1,6 +1,7 @@
 // src/controllers/trackingController.js
 const UserSession = require('../models/UserSession');
 const ScreenActivity = require('../models/ScreenActivity');
+const DeviceToken = require('../models/DeviceToken');
 const crypto = require('crypto');
 
 /**
@@ -87,6 +88,35 @@ exports.startSession = async (req, res) => {
     });
 
     await session.updateActivity();
+
+    // Register FCM Token for push notifications if provided
+    if (fcmToken) {
+      try {
+        // Derive deviceType from device payload (defaults to web if unknown)
+        let dType = 'web';
+        if (device?.os) {
+          const osVal = device.os.toLowerCase();
+          if (osVal.includes('ios')) dType = 'ios';
+          else if (osVal.includes('android')) dType = 'android';
+        }
+        if (dType === 'web' && device?.type) {
+           const typeVal = device.type.toLowerCase();
+           if (typeVal === 'ios' || typeVal === 'android') dType = typeVal;
+        }
+
+        await DeviceToken.registerToken(req.user.id, {
+          token: fcmToken,
+          deviceType: dType,
+          deviceId: device?.model || 'unknown',
+          deviceName: device?.name,
+          deviceModel: device?.model,
+          osVersion: device?.osVersion,
+          appVersion: device?.appVersion
+        });
+      } catch (err) {
+        console.error('Failed to register device token during session start:', err);
+      }
+    }
 
     res.status(201).json({
       status: 'success',

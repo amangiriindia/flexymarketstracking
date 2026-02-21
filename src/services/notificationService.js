@@ -78,7 +78,22 @@ class NotificationService {
         failureCount: response.failureCount
       };
 
-      // Handle failures
+      console.log('--- FCM NOTIFICATION RESULT ---');
+      console.log(`Target User ID: ${userId}`);
+      console.log(`Total Tokens Attempted: ${tokens.length}`);
+      console.log(`Success: ${response.successCount}, Failures: ${response.failureCount}`);
+
+      // Handle failures and log everything
+      response.responses.forEach((resp, idx) => {
+        if (resp.success) {
+          console.log(`[SUCCESS] Token: ${tokens[idx]}`);
+        } else {
+          console.log(`[FAILED] Token: ${tokens[idx]}`);
+          console.log(`[FAILED] Error:`, resp.error?.message || resp.error);
+        }
+      });
+      console.log('-------------------------------');
+
       if (response.failureCount > 0) {
         const failedTokens = [];
         response.responses.forEach((resp, idx) => {
