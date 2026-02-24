@@ -186,7 +186,7 @@ app.get('/', (req, res) => {
           <div class="endpoint"><span class="method method-base">API</span><span class="endpoint-path">/api/v1/notifications</span></div>
           <div class="endpoint"><span class="method method-base">API</span><span class="endpoint-path">/api/v1/users</span></div>
         </div>
-        <div class="footer">&copy; ${new Date().getFullYear()} Flexy Markets. All rights reserved.</div>
+        <div class="footer">&copy; ${new Date().getFullYear()} Achiver Fx. All rights reserved.</div>
       </div>
     </body>
     </html>
