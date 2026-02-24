@@ -190,12 +190,10 @@ exports.deleteComment = async (req, res, next) => {
       });
     }
 
-    // Soft delete (recommended)
+    // Soft delete — preserve data in database
     comment.isActive = false;
     comment.text = '[This comment was deleted]';
     await comment.save();
-
-    // Or use: await Comment.findByIdAndDelete(req.params.id);
 
     res.status(200).json({
       status: 'success',

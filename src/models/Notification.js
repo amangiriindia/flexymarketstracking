@@ -219,12 +219,7 @@ notificationSchema.statics.markAllAsRead = async function(userId) {
   );
 };
 
-// Clean up expired notifications
-notificationSchema.statics.cleanupExpired = async function() {
-  return await this.deleteMany({
-    expiresAt: { $lt: new Date() }
-  });
-};
+// NOTE: cleanupExpired removed — no automatic data deletion in production
 
 // ──────────────────────────────
 // Instance Methods

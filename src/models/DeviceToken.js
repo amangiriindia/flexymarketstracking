@@ -173,16 +173,7 @@ deviceTokenSchema.statics.markAsFailed = async function(token, reason) {
   return null;
 };
 
-// Clean up old inactive tokens
-deviceTokenSchema.statics.cleanupOldTokens = async function(daysOld = 90) {
-  const cutoffDate = new Date();
-  cutoffDate.setDate(cutoffDate.getDate() - daysOld);
-  
-  return await this.deleteMany({
-    isActive: false,
-    lastUsedAt: { $lt: cutoffDate }
-  });
-};
+// NOTE: cleanupOldTokens removed — no automatic data deletion in production
 
 // ──────────────────────────────
 // Instance Methods

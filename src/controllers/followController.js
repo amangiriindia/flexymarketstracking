@@ -19,6 +19,15 @@ exports.followUser = async (req, res, next) => {
     });
 
     if (existingFollow) {
+      // Reactivate if it was soft-deleted
+      if (!existingFollow.isActive) {
+        existingFollow.isActive = true;
+        await existingFollow.save();
+        return res.status(200).json({
+          status: 'success',
+          message: 'User followed successfully'
+        });
+      }
       return res.status(400).json({ status: 'error', message: 'Already following' });
     }
 
@@ -41,10 +50,15 @@ exports.followUser = async (req, res, next) => {
 // @access  Private
 exports.unfollowUser = async (req, res, next) => {
   try {
-    await Follow.deleteOne({
-      follower: req.user.id,
-      following: req.params.userId
-    });
+    // Soft delete — preserve data in database
+    await Follow.findOneAndUpdate(
+      {
+        follower: req.user.id,
+        following: req.params.userId,
+        isActive: true
+      },
+      { isActive: false }
+    );
 
     res.status(200).json({
       status: 'success',
@@ -64,13 +78,13 @@ exports.getFollowers = async (req, res, next) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
 
-    const followers = await Follow.find({ following: userId })
+    const followers = await Follow.find({ following: userId, isActive: true })
       .populate('follower', 'name avatar')
       .sort('-createdAt')
       .skip((page - 1) * limit)
       .limit(limit);
 
-    const total = await Follow.countDocuments({ following: userId });
+    const total = await Follow.countDocuments({ following: userId, isActive: true });
 
     res.status(200).json({
       status: 'success',
@@ -93,13 +107,13 @@ exports.getFollowing = async (req, res, next) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
 
-    const following = await Follow.find({ follower: userId })
+    const following = await Follow.find({ follower: userId, isActive: true })
       .populate('following', 'name avatar')
       .sort('-createdAt')
       .skip((page - 1) * limit)
       .limit(limit);
 
-    const total = await Follow.countDocuments({ follower: userId });
+    const total = await Follow.countDocuments({ follower: userId, isActive: true });
 
     res.status(200).json({
       status: 'success',
@@ -120,7 +134,8 @@ exports.getFollowStatus = async (req, res, next) => {
   try {
     const follow = await Follow.findOne({
       follower: req.user.id,
-      following: req.params.userId
+      following: req.params.userId,
+      isActive: true
     });
 
     res.status(200).json({
