@@ -5,8 +5,3 @@ module.exports = {
   tokenExpirationTime: 3600, 
   privilegeExpirationTime: 3600,
 };
-
-
-
-
-

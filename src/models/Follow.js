@@ -16,6 +16,10 @@ const followSchema = new mongoose.Schema({
     type: String,
     enum: ['pending', 'accepted'],
     default: 'accepted' // Change to 'pending' later for private accounts
+  },
+  isActive: {
+    type: Boolean,
+    default: true
   }
 }, {
   timestamps: true

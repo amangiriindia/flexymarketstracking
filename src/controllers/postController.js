@@ -297,11 +297,9 @@ exports.deletePost = async (req, res, next) => {
       return res.status(403).json({ status: 'error', message: 'Not authorized' });
     }
 
-    if (post.media?.length > 0) {
-      await deleteMedia(post.media.map(m => m.publicId));
-    }
-
-    await Post.findByIdAndDelete(req.params.id);
+    // Soft delete — preserve data in database
+    post.isActive = false;
+    await post.save();
     res.json({ status: 'success', message: 'Post deleted' });
   } catch (error) { next(error); }
 };
